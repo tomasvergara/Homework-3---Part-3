@@ -6,8 +6,6 @@ Created on Wed Apr 14 20:23:22 2021
 @author: Tomy
 """
 
-
-#from numpy import  zeros , ix_ , array , int
 import matplotlib.pylab as plt
 from quad9 import quad9
 densidad_hormigon = 2500 #kg/m3
@@ -16,7 +14,7 @@ import numpy as np
 
 g = 9.8
 
-fid = open("placa3_3_2.msh","r")
+fid = open("hw3.3_placa_fina.msh","r")
 
 LINE_ELEMENT = 8
 TRIANGLE_ELEMENT = 9
@@ -43,7 +41,7 @@ for i in range(Nnodes):
     xy[i,0] = float(sl[1])
     xy[i,1] = float(sl[2])
     
-print(xy)
+
 
 while True:
     line = fid.readline()
@@ -70,16 +68,20 @@ for i in range(Nelem):
     physical_grp = np.int32(sl[3])
     entity_number = np.int32(sl[4])
 
-
     if element_type == LINE_ELEMENT and physical_grp == Empotrado:
         n1 = np.int32(sl[5]) -1
         n2 = np.int32(sl[6]) -1
-        fixed_nodes += [n1,n2]
+        n3 = np.int32(sl[7]) -1
+        
+        fixed_nodes += [n1,n2,n3]
+        
     
     if (element_type == LINE_ELEMENT or element_type == QUAD_ELEMENT) and physical_grp == BordeNatural:
-        n1 = np.int32(sl[5]) 
-        n2 = np.int32(sl[6]) 
-        load_nodes += [n1,n2]
+        n1 = np.int32(sl[5]) -1
+        n2 = np.int32(sl[6]) -1
+        n3 = np.int32(sl[7]) -1
+        
+        load_nodes += [n1,n2,n3]
 
 
     if element_type == QUAD_ELEMENT and (physical_grp == Placa or physical_grp == Extremos):
@@ -99,20 +101,18 @@ for i in range(Nelem):
         Quadrangles.append(element_number)
         Nquads += 1
 
-print (conect)
-print (load_nodes)
+
 load_nodes.sort()
 final_load_nodes = []
 for i in load_nodes:
     if i not in final_load_nodes:
         final_load_nodes.append(i)
 
-print (final_load_nodes)
-
 
 h0 = 50e-2
+alpha = 4
 properties_0 = {}
-properties_0["E"] = 20e9 #Pa
+properties_0["E"] = 20e9*alpha #Pa
 properties_0["nu"] = 0.25
 properties_0["bx"] = 0
 properties_0["t"] = 4e-3
@@ -133,13 +133,13 @@ for e in Quadrangles:
     nm = int(conect[e,4])
     nn = int(conect[e,5])
     no = int(conect[e,6])
-    np = int(conect[e,7])
+    npe = int(conect[e,7])
     nq = int(conect[e,8])
     
-    xy_e = xy[[ ni , nj , nk , nl , nm , nn , no , np , nq ],:] #reescribiendo xy
+    xy_e = xy[[ ni , nj , nk , nl , nm , nn , no , npe , nq ],:] #reescribiendo xy
     ke , fe = quad9( xy_e , properties_0)
-    d = [ 2*ni , 2*ni+1 , 2*nj , 2*nj+1 , 2*nk , 2*nk+1 , 2*nl , 2*nl+1 , 2*nm , 2*nm+1 , 2*nn , 2*nn+1 , 2*no , 2*no+1 , 2*np , 2*np+1 , 2*nq , 2*nq+1 ]    
-    print (f"Elemento {e}: {d}")
+    d = [ 2*ni , 2*ni+1 , 2*nj , 2*nj+1 , 2*nk , 2*nk+1 , 2*nl , 2*nl+1 , 2*nm , 2*nm+1 , 2*nn , 2*nn+1 , 2*no , 2*no+1 , 2*npe , 2*npe+1 , 2*nq , 2*nq+1 ]    
+    #print (f"Elemento {e}: {d}")
     
     #DIRECT STIFFNESS METHOD
     for i in range(9*Ndofs_per_node):
@@ -149,12 +149,7 @@ for e in Quadrangles:
             q = d[j]
             K[p,q] += ke[i,j]
         f[p] += fe[i]
-"""
-plt.figure()
-plt.matshow(K)
-plt.colorbar()
-plt.show()
-"""
+
 
 fixed_nodes = np.unique(fixed_nodes)
 
@@ -167,18 +162,16 @@ free_DOFs = np.arange(Ndofs)
 free_DOFs = np.setdiff1d(free_DOFs, c_DOFs)
 
 
-
-
+q = 1000.0/(len(final_load_nodes)-1)
 i = 0
-"""
 for n in final_load_nodes:
     if i <=1:
-        f[2*n] = 1000.0/8
+        f[2*n] = q/8
         i +=1
     else:
-        f[2*n] = 1000.0/4
+        f[2*n] = q/4
         i +=1
-"""
+
 Kff = K[np.ix_(free_DOFs, free_DOFs)]
 Kfc = K[np.ix_(free_DOFs, c_DOFs)]
 Kcf = K[np.ix_(c_DOFs, free_DOFs)]
@@ -200,7 +193,7 @@ R = Kcf @ u[free_DOFs] + Kcc @ u[c_DOFs] - fc
 print (f"u={u}")
 print (f"R={R}")
 
-factor = 1e4
+factor = 2.5e5
 
 uv = u.reshape([-1,2])
 
@@ -215,21 +208,24 @@ for e in Quadrangles:
     nm = int(conect[e,4])
     nn = int(conect[e,5])
     no = int(conect[e,6])
-    np = int(conect[e,7])
+    npe = int(conect[e,7])
     nq = int(conect[e,8])
 
-    xy_e = xy[[ ni , nj, nk, nl, nm, nn, no, np , nq, ni],:] + factor*uv[[ ni , nj, nk, nl, nm, nn, no, np , nq, ni],:] 
+    xy_e = xy[[ ni, nm, nj, nn, nk, no, nl, npe, ni],:] + factor*uv[[ ni, nm, nj, nn, nk, no, nl, npe, ni],:] 
     
     plt.plot(xy_e[:,0] , xy_e[:,1], "k")
 
 
 plt.axis("equal")
+plt.title("Fine mesh with alpha = 4")
+plt.savefig("q9_fine_alpha4")
 plt.show()        
-"""        
+
+
 #ESCRITURA DE ARCHIVOS PARA QUE EL MESH VEA LAS DEFORMACIONES
 
 from gmesh_post import write_node_data,write_node_data_2,write_element_data
-from quad4 import *
+from quad9 import *
 nodes = np.arange(1,Nnodes+1)
 write_node_data("ux.msh",nodes,uv[:,0],"Despl. X")
 write_node_data("uy.msh",nodes,uv[:,1],"Despl. Y")
@@ -248,10 +244,15 @@ for e in Quadrangles:
     nj = int(conect[e,1])
     nk = int(conect[e,2])
     nl = int(conect[e,3])
-    xy_e = xy2[[ ni , nj , nk , nl, ni ],:]
-    uv_e = uv[[ni,nj,nk,nl],:]
+    nm = int(conect[e,4])
+    nn = int(conect[e,5])
+    no = int(conect[e,6])
+    npe = int(conect[e,7])
+    nq = int(conect[e,8])
+    xy_e = xy2[[ ni , nj , nk , nl, nm , nn , no , npe , nq , ni ],:]
+    uv_e = uv[[ni,nj,nk,nl,nm,nn,no,npe,nq],:]
     u_e = uv_e.reshape((-1))
-    epsilon,sigma = quad4_post(xy_e,u_e, properties_0)
+    epsilon,sigma = quad9_post(xy_e,u_e, properties_0)
     sigma_xx[i] = sigma[0] 
     sigma_yy[i] = sigma[1]
     sigma_xy[i] = sigma[2]
@@ -262,7 +263,7 @@ for e in Quadrangles:
 
 elementos = np.array(Quadrangles)+1
 write_element_data("sigma_x.msh",elementos,sigma_xx,"Sigma_x")
-"""
+
 
 
 
